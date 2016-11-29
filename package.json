@@ -1,0 +1,18 @@
+{
+  "name": "halfway-server",
+  "version": "0.0.1",
+  "description": "RESTful server to support the Halfway app",
+  "author": "Halfway",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "~4.9.0",
+    "firebase": "^3.6.1",
+    "firebase-admin": "^4.0.2"
+  },
+  "engines": {
+    "node": "5.0.0"
+  }
+}
