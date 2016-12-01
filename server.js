@@ -8,6 +8,7 @@ var fs = require('fs');
 var admin = require('firebase-admin');
 var http = require('http');
 var bodyParser = require('body-parser');
+var favicon = require('serve-favicon');
 
 admin.initializeApp({
   credential: admin.credential.cert("halfway-38ea3-firebase-adminsdk-w5kil-56a1d54347.json"),
@@ -22,6 +23,7 @@ var port = process.env.PORT || 3000;
 
 app.use(bodyParser.urlencoded({extended: false}));
 app.use(bodyParser.json());
+app.use(favicon(path.join(__dirname,'public','photos','favicon.ico'))); 
 
 app.use(express.static(path.join(__dirname, '/public')));
 
