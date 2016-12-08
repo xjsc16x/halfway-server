@@ -136,6 +136,41 @@ app.param('groupid', function(req, res, next, groupid) {
 // returns collection of place ids to populate in the app
 app.get('/api/placeids/:groupid', function(req, res) {
 	var group = req.group;
+
+	if (group.location && group.location != "null") {
+		var center = {
+			"latitude": group.location.latitude,
+			"longitude": group.location.longitude
+		}
+
+		// query object for Places search
+		var query = {
+			"location": center,
+			"language": 'en',
+			"radius": 10000,
+			"type": 'restaurant'
+		}
+
+		googleMapsClient.placesNearby(query, function(err, response) {
+			if (err) {
+			    res.status(500).end();
+			} else {
+				var results = response.json.results;
+				var placeIds = [];
+				var i = 0;
+
+				results.forEach(function(obj) {
+					placeIds[i++] = obj.place_id;
+				});
+
+				var json = {
+					"count": i,
+					"results": placeIds
+				};
+				res.json(json).end();
+			}
+		});
+	}
 	
 	// get user locations
 	var locations = {};
@@ -156,7 +191,7 @@ app.get('/api/placeids/:groupid', function(req, res) {
 	Promise.all(promises).then(function() {
 		// return empty list
 		if (locations.length == 0) {
-			res.json({}).end();
+			res.json({"count": 0, "results": []}).end();
 			return;
 		}
 
@@ -172,8 +207,23 @@ app.get('/api/placeids/:groupid', function(req, res) {
 		}
 
 		googleMapsClient.placesNearby(query, function(err, response) {
-			if (response != null) res.json(response).end();
-			else res.status(500).end();
+			if (err) {
+			    res.status(500).end();
+			} else {
+				var results = response.json.results;
+				var placeIds = [];
+				var i = 0;
+
+				results.forEach(function(obj) {
+					placeIds[i++] = obj.place_id;
+				});
+
+				var json = {
+					"count": i,
+					"results": placeIds
+				};
+				res.json(json).end();
+			}
 		});
 	});
 });
