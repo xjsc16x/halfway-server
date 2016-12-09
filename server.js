@@ -92,15 +92,26 @@ var Group = function(groupid, creator, meeting_time, location, members) {
 
 // get group by id
 Group.getById = function(groupid) {
-	console.log("requesting group " + groupid);
-	return db.ref('groups/' + groupid).once('value').then(function (snapshot) {
-		if (snapshot.exists()) {
-			var snap = snapshot.val();
-			return new Group(snapshot.key, snap.creator, snap.meeting_time,
-				snap.location, snap.members);
-		}
-		else return null;
-	});
+  console.log("requesting group " + groupid);
+  var promises = [];
+  // get group object
+  promises[0] = db.ref('groups/' + groupid).once('value').then(function (snapshot) {
+    if (snapshot.exists()) {
+      var snap = snapshot.val();
+      return new Group(snapshot.key, snap.creator, snap.meeting_time,
+        snap.location, null);
+    }
+    else return null;
+  });
+  // get members from group-members
+  promises[1] = db.ref('group-members/' + groupid).once('value').then(function (snapshot) {
+    if (snapshot.exists()) {
+      return snapshot.val();
+    }
+    else return null;
+  });
+  // return array with two promises
+  return promises;
 }
 
 // check if group id exists
@@ -110,26 +121,54 @@ Group.exists = function(groupid) {
 	});
 }
 
+var placeResults = function(res, center) {
+  // query object for Places search
+  var query = {
+    "location": center,
+    "language": 'en',
+    "radius": 10000,
+    "type": 'restaurant'
+  }
+  // perform query then write results to res
+  googleMapsClient.placesNearby(query, function(err, response) {
+    if (err) {
+        res.status(500).end();
+    } else {
+      var results = response.json.results;
+      var placeIds = [];
+      var i = 0;
 
-// var testGroup = new Group("-KYBlhBrm3KkAXvnmgQh", "tleung", "12-6-2016 5:00PM", null, { "tleung": { "location": null, "userid": "tleung" } });
-// var testGroup2 = null;
-// console.log(testGroup);
-// console.log(testGroup == null);
-// console.log(testGroup2 == null);
+      results.forEach(function(obj) {
+        placeIds[i++] = obj.place_id;
+      });
+
+      var json = {
+        "count": i,
+        "results": placeIds
+      };
+      res.json(json).end();
+    }
+  });
+}
 
 
 /* ======================== API calls ======================== */
 
 // using this later to verify that groupid exists
 app.param('groupid', function(req, res, next, groupid) {
-	// do validation that groupid exists
-	Group.getById(groupid).then(function(group) {
-		if (group != null) {
-			req.group = group;
-			next();
-		}
-		else res.status(400).send('group id not found');
-	});
+  // do validation that groupid exists
+  var promises = Group.getById(groupid);
+  Promise.all(promises).then(values => {
+    if (values[0] != null) {
+      var group = values[0];
+      group.members = values[1];
+      req.group = group;
+      next();
+    }
+    else res.status(400).send('group id not found');
+  }).catch(reason => {
+    console.log(reason);
+  });
 });
 
 // calculate center of group and update in the database
@@ -143,49 +182,23 @@ app.get('/api/placeids/:groupid', function(req, res) {
 			"longitude": group.location.longitude
 		}
 
-		// query object for Places search
-		var query = {
-			"location": center,
-			"language": 'en',
-			"radius": 10000,
-			"type": 'restaurant'
-		}
-
-		googleMapsClient.placesNearby(query, function(err, response) {
-			if (err) {
-			    res.status(500).end();
-			} else {
-				var results = response.json.results;
-				var placeIds = [];
-				var i = 0;
-
-				results.forEach(function(obj) {
-					placeIds[i++] = obj.place_id;
-				});
-
-				var json = {
-					"count": i,
-					"results": placeIds
-				};
-				res.json(json).end();
-			}
-		});
+		placeResults(res, center);
 	}
 	
 	// get user locations
 	var locations = {};
 	var promises = [];
-	for (var username in group.members) {
-		// see if the user manually put their location into the group
-		var userloc = group.members[username].location;
-		if (userloc != null && userloc != "null") {
-			locations[username] = group.members[username].location;
-		} else {
-			promises.push(User.getByUsername(username).then(function(user) {
-				if (user != null && user.location != null) locations[username] = user.location;
-			}));
-		}
-	}
+	for (var user in group.members) {
+    var userloc = group.members[user].location;
+      // the user has not yet put their location into the group
+    if (userloc.latitude == 0 && userloc.longitude == 0) {
+      promises.push(User.getByUsername(user).then(function(user) {
+        if (user != null && user.location != null) locations[user] = user.location;
+      }));
+    } else {
+          locations[user] = group.members[user].location;
+      }
+  }
 
 	// wait for all promises to finish before moving on
 	Promise.all(promises).then(function() {
@@ -198,33 +211,11 @@ app.get('/api/placeids/:groupid', function(req, res) {
 		// find center of locations
 		var center = geolib.getCenter(locations);
 
-		// query object for Places search
-		var query = {
-			"location": center,
-			"language": 'en',
-			"radius": 10000,
-			"type": 'restaurant'
-		}
+    // debug
+    // console.log(locations);
+    // console.log(center);
 
-		googleMapsClient.placesNearby(query, function(err, response) {
-			if (err) {
-			    res.status(500).end();
-			} else {
-				var results = response.json.results;
-				var placeIds = [];
-				var i = 0;
-
-				results.forEach(function(obj) {
-					placeIds[i++] = obj.place_id;
-				});
-
-				var json = {
-					"count": i,
-					"results": placeIds
-				};
-				res.json(json).end();
-			}
-		});
+		placeResults(res, center);
 	});
 });
 
