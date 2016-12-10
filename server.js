@@ -171,6 +171,15 @@ app.param('groupid', function(req, res, next, groupid) {
   });
 });
 
+app.param('username', function(req, res, next, username) {
+  User.getByUsername(username).then(function(user) {
+    if (user != null) {
+      req.user = user;
+      next();
+    } else res.status(400).send('username not found');
+  });
+});
+
 // calculate center of group and update in the database
 // returns collection of place ids to populate in the app
 app.get('/api/placeids/:groupid', function(req, res) {
@@ -234,9 +243,7 @@ app.post('/api/group/create', function(req, res) {
 	
 	groupData.creator = req.body.creator;
 	groupData.meeting_time = (req.body.meeting_time) ? req.body.meeting_time : "null";
-	groupData.location = "null";
-	groupData.members = {}
-	groupData.members[groupData.creator] = { "userid": groupData.creator, "location": "null" };
+	groupData.members[groupData.creator] = { "userid": groupData.creator, "location": {"latitude": 0, "longitude": 0}} };
 	newGroup.set(groupData);
 
 	// return new id
@@ -246,4 +253,8 @@ app.post('/api/group/create', function(req, res) {
 
 app.listen(port, function() {
   console.log('App is listening on port ' + port);
+});
+
+app.get('/api/user/:username', function(req, res) {
+  res.json(res.user);
 });
