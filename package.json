@@ -5,7 +5,8 @@
   "author": "Halfway",
   "private": true,
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "mocha"
   },
   "dependencies": {
     "@google/maps": "^0.3.1",

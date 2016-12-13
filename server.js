@@ -35,6 +35,8 @@ app.get('/', function(req, res) {
     res.sendFile(path.join(__dirname, '/public/index.html'));
 });
 
+var env = process.env.NODE_ENV || 'development';
+
 // url to update an existing group
 // app.post('/api/group/update', function(req, res) {
 //  var id = req.body.id;
@@ -56,11 +58,11 @@ User.getByUsername = function(username) {
     .once('value').then(function (snapshot) {
         if (snapshot.exists()) {
             var snap = snapshot.val();
-            // since we don't know the userid we need to find it
-            var key = Object.keys(snap)[0];
-            // get relevent user info
-            snap = snap[key];
-            return new User(snap.username, snap.userId, snap.location);
+        // since we don't know the userid we need to find it
+        var key = Object.keys(snap)[0];
+        // get relevent user info
+        snap = snap[key];
+        return new User(snap.username, snap.userId, snap.location);
         }
         else return null;
     });
@@ -86,24 +88,24 @@ var Group = function(groupid, creator, meeting_time, location, members) {
 Group.getById = function(groupid) {
     console.log("requesting group " + groupid);
     var promises = [];
-  // get group object
-  promises[0] = db.ref('groups/' + groupid).once('value').then(function (snapshot) {
-    if (snapshot.exists()) {
-        var snap = snapshot.val();
-        return new Group(snapshot.key, snap.creator, snap.meeting_time,
-            snap.location, null);
-    }
-    else return null;
-  });
-  // get members from group-members
-  promises[1] = db.ref('group-members/' + groupid).once('value').then(function (snapshot) {
-    if (snapshot.exists()) {
-        return snapshot.val();
-    }
-    else return null;
-  });
-  // return array with two promises
-  return promises;
+    // get group object
+    promises[0] = db.ref('groups/' + groupid).once('value').then(function (snapshot) {
+        if (snapshot.exists()) {
+            var snap = snapshot.val();
+            return new Group(snapshot.key, snap.creator, snap.meeting_time,
+                snap.location, null);
+        }
+        else return null;
+    });
+    // get members from group-members
+    promises[1] = db.ref('group-members/' + groupid).once('value').then(function (snapshot) {
+        if (snapshot.exists()) {
+            return snapshot.val();
+        }
+        else return null;
+    });
+    // return array with two promises
+    return promises;
 }
 
 // check if group id exists
@@ -114,15 +116,15 @@ Group.exists = function(groupid) {
 }
 
 var placeResults = function(res, center) {
-  // query object for Places search
-  var query = {
+// query object for Places search
+var query = {
     "location": center,
     "language": 'en',
     "radius": 10000,
     "type": 'restaurant'
-  }
-  // perform query then write results to res
-  googleMapsClient.placesNearby(query, function(err, response) {
+}
+// perform query then write results to res
+googleMapsClient.placesNearby(query, function(err, response) {
     if (err) {
         res.status(500).end();
     } else {
@@ -141,7 +143,7 @@ var placeResults = function(res, center) {
         res.setHeader('Content-Type', 'application/json');
         res.json(json).end();
     }
-  });
+});
 }
 
 
@@ -184,21 +186,21 @@ app.get('/api/placeids/:groupid', function(req, res) {
 
         placeResults(res, center);
     }
-    
+
     // get user locations
     var locations = {};
     var promises = [];
     for (var user in group.members) {
         var userloc = group.members[user].location;
-      // the user has not yet put their location into the group
-      if (userloc.latitude == 0 && userloc.longitude == 0) {
-        promises.push(User.getByUsername(user).then(function(user) {
-            if (user != null && user.location != null) locations[user] = user.location;
-        }));
-      } else {
-        locations[user] = group.members[user].location;
-      }
-  }
+        // the user has not yet put their location into the group
+        if (userloc.latitude == 0 && userloc.longitude == 0) {
+            promises.push(User.getByUsername(user).then(function(user) {
+                if (user != null && user.location != null) locations[user] = user.location;
+            }));
+        } else {
+            locations[user] = group.members[user].location;
+        }
+    }
 
     // wait for all promises to finish before moving on
     Promise.all(promises).then(function() {
@@ -212,58 +214,56 @@ app.get('/api/placeids/:groupid', function(req, res) {
         // find center of locations
         var center = geolib.getCenter(locations);
 
-    // debug
-    // console.log(locations);
-    // console.log(center);
-
-    placeResults(res, center);
-});
+        placeResults(res, center);
+    });
 });
 
 
 /* ======================== Test API calls ======================== */
 
-// url to create a new group, returns group id
-app.post('/testapi/group', function(req, res) {
-    // creator is required
-    if (!req.body.creator) {
-        res.status(400).send('must specify a creator');
-        return;
-    }
+if (env == 'development' || env == 'dev' || env == 'test') {
+    // url to create a new group, returns group id
+    app.post('/testapi/group', function(req, res) {
+        // creator is required
+        if (!req.body.creator) {
+            res.status(400).send('must specify a creator');
+            return;
+        }
 
-    // Using transaction-based group creation.
-    // This will ensure every call gets a unique ID from firebase
-    var newGroup = db.ref('groups').push();
-    var groupData = {};
-    
-    groupData.creator = req.body.creator;
-    groupData.meeting_time = (req.body.meeting_time) ? req.body.meeting_time : "null";
-    groupData.members[groupData.creator] = { "userid": groupData.creator, "location": {"latitude": 0, "longitude": 0} };
-    newGroup.set(groupData);
+        // Using transaction-based group creation.
+        // This will ensure every call gets a unique ID from firebase
+        var newGroup = db.ref('groups').push();
+        var groupData = {};
 
-    // return new id
-    res.setHeader('Content-Type', 'application/json');
-    res.json({ "groupid": newGroup.key }).end();
-});
+        groupData.creator = req.body.creator;
+        groupData.meeting_time = (req.body.meeting_time) ? req.body.meeting_time : "null";
+        groupData.members[groupData.creator] = { "userid": groupData.creator,
+                "location": {"latitude": 0, "longitude": 0} };
+        newGroup.set(groupData);
 
-// test call to get a user
-app.get('/testapi/user/:username', function(req, res) {
-    if (req.user == null) res.status(400).send('username not found');
-    else {
+        // return new id
         res.setHeader('Content-Type', 'application/json');
-        res.json(req.user).end();
-    }
-});
+        res.json({ "groupid": newGroup.key }).end();
+    });
 
-// test call to make a user
-app.post('/testapi/user', function(req, res) {
-    if (!req.body.username) {
-        res.status(400).send('must specify a username');
-        return;
-    }
+    // test call to get a user
+    app.get('/testapi/user/:username', function(req, res) {
+        if (req.user == null) res.status(400).send('username not found');
+        else {
+            res.setHeader('Content-Type', 'application/json');
+            res.json(req.user).end();
+        }
+    });
 
-    // make sure username doesn't exist already
-    User.getByUsername(req.body.username).then(function(user) {
+    // test call to make a user
+    app.post('/testapi/user', function(req, res) {
+        if (!req.body.username) {
+            res.status(400).send('must specify a username');
+            return;
+        }
+
+        // make sure username doesn't exist already
+        User.getByUsername(req.body.username).then(function(user) {
         // username exists
         if (user != null) {
             res.status(400).send('username exists');
@@ -272,7 +272,7 @@ app.post('/testapi/user', function(req, res) {
 
         var newUser = db.ref('users').push();
         var userData = {};
-        
+
         userData.username = req.body.username;
         userData.name = req.body.name;
         userDate.userId = newUser.key;
@@ -280,18 +280,20 @@ app.post('/testapi/user', function(req, res) {
         newUser.set(userData);
 
         res.json(userData).end();
+        });
     });
-});
 
-// test call to delete user
-app.delete('/testapi/user/:username', function(req, res) {
-    if (req.user != null) {
-        db.ref('users').child(req.user.userId).remove();
-        res.status(200).end();
-    } else res.status(400).send("username not found");
-});
+    // test call to delete user
+    app.delete('/testapi/user/:username', function(req, res) {
+        if (req.user != null) {
+            db.ref('users').child(req.user.userId).remove();
+            res.status(200).end();
+        } else res.status(400).send("username not found");
+    });
+}
 
-//start app
+
+// START APP
 app.listen(port, function() {
     console.log('App is listening on port ' + port);
 });
