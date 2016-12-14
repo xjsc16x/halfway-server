@@ -68,10 +68,11 @@ User.getByUsername = function(username) {
     });
 }
 
-var Group = function(groupid, creator, meeting_time, location, members) {
+var Group = function(groupid, creator, meetingDate, meetingTime, location, members) {
     this.id = groupid;
     this.creator = creator;
-    this.meeting_time = meeting_time;
+    this.meetingDate = meetingDate;
+    this.meetingTime = meetingTime;
     this.location = location;
     this.members = members;
 };
@@ -92,7 +93,7 @@ Group.getById = function(groupid) {
     promises[0] = db.ref('groups/' + groupid).once('value').then(function (snapshot) {
         if (snapshot.exists()) {
             var snap = snapshot.val();
-            return new Group(snapshot.key, snap.creator, snap.meeting_time,
+            return new Group(snapshot.key, snap.creator, snap.meetingDate, snap.meetingTime,
                 snap.location, null);
         }
         else return null;
@@ -116,34 +117,34 @@ Group.exists = function(groupid) {
 }
 
 var placeResults = function(res, center) {
-// query object for Places search
-var query = {
-    "location": center,
-    "language": 'en',
-    "radius": 10000,
-    "type": 'restaurant'
-}
-// perform query then write results to res
-googleMapsClient.placesNearby(query, function(err, response) {
-    if (err) {
-        res.status(500).end();
-    } else {
-        var results = response.json.results;
-        var placeIds = [];
-        var i = 0;
-
-        results.forEach(function(obj) {
-            placeIds[i++] = obj.place_id;
-        });
-
-        var json = {
-            "count": i,
-            "results": placeIds
-        };
-        res.setHeader('Content-Type', 'application/json');
-        res.json(json).end();
+    // query object for Places search
+    var query = {
+        "location": center,
+        "language": 'en',
+        "rankby": 'distance',
+        "type": 'restaurant'
     }
-});
+    // perform query then write results to res
+    googleMapsClient.placesNearby(query, function(err, response) {
+        if (err) {
+            res.status(500).end();
+        } else {
+            var results = response.json.results;
+            var placeIds = [];
+            var i = 0;
+
+            results.forEach(function(obj) {
+                placeIds[i++] = obj.place_id;
+            });
+
+            var json = {
+                "count": i,
+                "results": placeIds
+            };
+            res.setHeader('Content-Type', 'application/json');
+            res.json(json).end();
+        }
+    });
 }
 
 
@@ -236,12 +237,19 @@ if (env == 'development' || env == 'dev' || env == 'test') {
         var groupData = {};
 
         groupData.creator = req.body.creator;
-        groupData.meeting_time = (req.body.meeting_time) ? req.body.meeting_time : "null";
-        groupData.members[groupData.creator] = { "userid": groupData.creator,
-                "location": {"latitude": 0, "longitude": 0} };
+        groupData.groupName = (req.body.groupName) ? req.body.groupName : "Test";
+        groupData.meetingTime = (req.body.meetingTime) ? req.body.meetingTime : "null";
         newGroup.set(groupData);
 
-        // return new id
+        var members = {};
+        members[groupData.creator] = { 
+            "userid": groupData.creator,
+            "location": {"latitude": 0, "longitude": 0} };
+        var group_members = {};
+        group_members[newGroup.key] = members;
+        db.ref('group-members').set(group_members);
+
+        // return new ids
         res.setHeader('Content-Type', 'application/json');
         res.json({ "groupid": newGroup.key }).end();
     });
@@ -264,22 +272,23 @@ if (env == 'development' || env == 'dev' || env == 'test') {
 
         // make sure username doesn't exist already
         User.getByUsername(req.body.username).then(function(user) {
-        // username exists
-        if (user != null) {
-            res.status(400).send('username exists');
-            return;
-        }
+            // username exists
+            if (user != null) {
+                res.status(400).send('username exists');
+                return;
+            }
 
-        var newUser = db.ref('users').push();
-        var userData = {};
+            var newUser = db.ref('users').push();
+            var userData = {};
 
-        userData.username = req.body.username;
-        userData.name = req.body.name;
-        userDate.userId = newUser.key;
-        userData.location = (req.body.location == null) ? { "latitude": 0, "longitude": 0 } : req.body.location;
-        newUser.set(userData);
+            userData.username = req.body.username;
+            userData.name = req.body.name;
+            userData.userId = newUser.key;
+            userData.location = (req.body.location == null) ? { "latitude": 0, "longitude": 0 } : req.body.location;
 
-        res.json(userData).end();
+            newUser.set(userData);
+
+            res.json(userData).end();
         });
     });
 
